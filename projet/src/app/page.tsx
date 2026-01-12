@@ -1,24 +1,35 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { onAuthStateChanged, User, signInWithEmailAndPassword } from "firebase/auth";
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, Timestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { Lock, Save, Loader2, Maximize2, ArrowRight, Plus } from "lucide-react";
 import dynamic from "next/dynamic";
+// NoteEditor와 MDXEditorMethods 타입 가져오기
+import { MDXEditorMethods } from "@/components/NoteEditor";
 
-const NoteEditor = dynamic(() => import("@/components/NoteEditor"), { ssr: false, loading: () => <div className="text-gray-600 h-20 flex items-center">Loading...</div> });
+const NoteEditor = dynamic(() => import("@/components/NoteEditor"), { 
+  ssr: false, 
+  loading: () => <div className="text-gray-600 h-20 flex items-center">Loading...</div> 
+});
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // 입력 상태
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [password, setPassword] = useState("");
-  const [records, setRecords] = useState<any[]>([]);
   
-  const MY_EMAIL = "host@email.com"; 
+  // ★ 에디터 제어용 Ref 추가
+  const editorRef = useRef<MDXEditorMethods>(null);
+
+  const [records, setRecords] = useState<any[]>([]);
+  const MY_EMAIL = "your-email@example.com"; 
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
@@ -45,9 +56,19 @@ export default function Home() {
     setIsSaving(true);
     try {
       await addDoc(collection(db, "records"), {
-        uid: user.uid, title: title || "Untitled Knot", content, created_at: serverTimestamp(), updated_at: serverTimestamp(), status: 'active'
+        uid: user.uid, 
+        title: title || "Untitled Knot", 
+        content, 
+        created_at: serverTimestamp(), 
+        updated_at: serverTimestamp(), 
+        status: 'active'
       });
-      setTitle(""); setContent("");
+      
+      // ★ 저장 성공 후 초기화 로직 강화
+      setTitle(""); 
+      setContent("");
+      editorRef.current?.setMarkdown(""); // 에디터 내부 텍스트 강제 삭제
+
     } catch { alert("Error"); } finally { setIsSaving(false); }
   };
 
@@ -84,8 +105,9 @@ export default function Home() {
         </div>
         <div className="bg-[#111] border border-gray-800 rounded-xl p-5 flex flex-col gap-4 shadow-sm">
           <input type="text" placeholder="Title..." className="bg-transparent text-lg font-bold text-white placeholder-gray-600 border-none outline-none p-0" value={title} onChange={(e) => setTitle(e.target.value)}/>
-          <div className="min-h-30 -ml-4"> {/* Editor padding 보정 */}
-            <NoteEditor markdown={content} onChange={setContent} />
+          <div className="min-h-30 -ml-4">
+            {/* ★ Ref 연결 */}
+            <NoteEditor ref={editorRef} markdown={content} onChange={setContent} />
           </div>
           <div className="flex justify-end border-t border-gray-800 pt-3 mt-2">
             <button onClick={handleQuickSave} disabled={isSaving} className="bg-white text-black px-5 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2">

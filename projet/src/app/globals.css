@@ -4,7 +4,7 @@
   --background: #0a0a0a;
   --foreground: #e5e5e5;
   --border-color: #262626;
-  --accent: #ca8a04; /* Yellow-600 */
+  --accent: #ca8a04;
 }
 
 html, body {
@@ -23,41 +23,43 @@ body {
   overflow-x: hidden;
 }
 
-/* ★ 핵심: 시즌 1의 감성을 계승하는 표준 컨테이너 */
+/* ★ 최종 수정된 컨테이너 */
 .projet-container {
   width: 100%;
-  max-width: 700px; /* 황금 비율 */
+  max-width: 700px;
   min-height: 100vh;
-  padding: 2rem 1.5rem; /* 모바일: px-6, 상하: py-8 */
+  margin: 0 auto;
+  
+  /* 반응형 패딩: 모바일은 약간 좁게, PC는 여유있게 */
+  padding: 1.5rem 1.25rem; 
+  
   display: flex;
   flex-direction: column;
-  gap: 2.5rem; /* 요소 간 간격 통일 */
+  gap: 2.5rem;
   background-color: var(--background);
 }
 
-/* 폼 요소 공통 스타일 */
-input, button, select, textarea {
-  font-family: inherit;
-  border-radius: 12px; /* 조금 더 부드럽게 */
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+@media (min-width: 640px) {
+  .projet-container {
+    padding: 2.5rem 2rem; /* PC에서는 더 넓은 여백 */
+  }
 }
 
-input:focus {
-  outline: none;
-  border-color: var(--foreground);
+/* 폼 요소 */
+input, button, select, textarea {
+  font-family: inherit;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
+input:focus { outline: none; border-color: var(--foreground); }
 
 /* 스크롤바 */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 
-/* MDX 에디터 타이포그래피 */
-.mdx-editor {
-  font-size: 1.05rem;
-  line-height: 1.75;
-  color: #d4d4d4;
-}
+/* MDX Editor Styles */
+.mdx-editor { font-size: 1.05rem; line-height: 1.75; color: #d4d4d4; }
 .mdx-editor h1 { font-size: 1.8em; font-weight: 700; margin: 1.5em 0 0.8em; color: #fff; }
 .mdx-editor h2 { font-size: 1.4em; font-weight: 600; margin: 1.4em 0 0.6em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
 .mdx-editor p { margin-bottom: 1.2em; }

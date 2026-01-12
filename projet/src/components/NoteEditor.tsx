@@ -7,23 +7,26 @@ import {
   quotePlugin,
   thematicBreakPlugin,
   markdownShortcutPlugin,
-  MDXEditorMethods // 이 타입이 중요합니다
+  MDXEditorMethods, // 이 타입이 중요함
+  MDXEditorProps
 } from "@mdxeditor/editor";
 import { forwardRef } from "react";
 import "@/app/mdx-editor.css";
 
-interface EditorProps {
+// 외부에서 쓸 수 있게 export
+export type { MDXEditorMethods };
+
+interface EditorProps extends MDXEditorProps {
   markdown: string;
   onChange?: (markdown: string) => void;
   readOnly?: boolean;
 }
 
-// forwardRef를 사용하여 부모가 에디터의 메서드(setMarkdown 등)에 접근할 수 있게 합니다.
-const NoteEditor = forwardRef<MDXEditorMethods, EditorProps>(({ markdown, onChange, readOnly = false }, ref) => {
+const NoteEditor = forwardRef<MDXEditorMethods, EditorProps>(({ markdown, onChange, readOnly = false, ...props }, ref) => {
   return (
     <div className={`w-full prose prose-invert max-w-none ${readOnly ? 'pointer-events-none' : ''}`}>
       <MDXEditor
-        ref={ref} // 부모로부터 받은 ref를 여기에 연결
+        ref={ref}
         markdown={markdown}
         onChange={readOnly ? undefined : onChange}
         readOnly={readOnly}
@@ -36,6 +39,7 @@ const NoteEditor = forwardRef<MDXEditorMethods, EditorProps>(({ markdown, onChan
           thematicBreakPlugin(),
           markdownShortcutPlugin()
         ]}
+        {...props}
       />
     </div>
   );
