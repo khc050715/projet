@@ -1,10 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #e5e5e5;
-  --border-color: #262626;
-  --accent: #ca8a04;
+  /* 고급스러운 다크 테마 (Zinc Palette) */
+  --bg-main: #09090b;      /* 더 깊은 검정 */
+  --bg-card: #18181b;      /* 카드 배경 */
+  --bg-hover: #27272a;     /* 호버 효과 */
+  --border: #27272a;       /* 경계선 */
+  --text-primary: #e4e4e7; /* 메인 텍스트 */
+  --text-secondary: #a1a1aa; /* 보조 텍스트 */
+  --accent: #d97706;       /* 포인트 컬러 (Amber-600) */
+  --danger: #ef4444;       /* 삭제/경고 */
 }
 
 html, body {
@@ -14,55 +19,130 @@ html, body {
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, sans-serif;
+  line-height: 1.7; /* 줄 간격 여유 */
+  -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
 }
 
-/* ★ 최종 수정된 컨테이너 */
+/* --- [레이아웃: 황금 비율 컨테이너] --- */
 .projet-container {
   width: 100%;
   max-width: 700px;
   min-height: 100vh;
   margin: 0 auto;
-  
-  /* 반응형 패딩: 모바일은 약간 좁게, PC는 여유있게 */
-  padding: 1.5rem 1.25rem; 
-  
+  padding: 3rem 1.5rem; /* 상하 여백을 더 줘서 숨통을 트임 */
   display: flex;
   flex-direction: column;
   gap: 2.5rem;
-  background-color: var(--background);
+  transition: padding 0.3s ease;
 }
 
-@media (min-width: 640px) {
+/* 모바일 대응 */
+@media (max-width: 640px) {
   .projet-container {
-    padding: 2.5rem 2rem; /* PC에서는 더 넓은 여백 */
+    padding: 1.5rem 1.25rem;
+    gap: 1.5rem;
   }
 }
 
-/* 폼 요소 */
-input, button, select, textarea {
-  font-family: inherit;
-  border-radius: 12px;
+/* --- [UI 컴포넌트: Glassmorphism & Soft Touch] --- */
+
+/* 카드 스타일 */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px; /* 더 둥글게 */
+  padding: 1.5rem;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
-input:focus { outline: none; border-color: var(--foreground); }
+
+.card:hover {
+  border-color: #3f3f46;
+  transform: translateY(-2px); /* 살짝 떠오르는 효과 */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+}
+
+/* 입력 필드 */
+input, textarea, select {
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 12px;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+}
+
+/* 버튼 */
+button {
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+button:active {
+  transform: scale(0.98);
+}
 
 /* 스크롤바 */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
-/* MDX Editor Styles */
-.mdx-editor { font-size: 1.05rem; line-height: 1.75; color: #d4d4d4; }
-.mdx-editor h1 { font-size: 1.8em; font-weight: 700; margin: 1.5em 0 0.8em; color: #fff; }
-.mdx-editor h2 { font-size: 1.4em; font-weight: 600; margin: 1.4em 0 0.6em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
-.mdx-editor p { margin-bottom: 1.2em; }
-.mdx-editor blockquote { border-left: 3px solid #444; margin: 1.5em 0; padding-left: 1rem; color: #888; font-style: italic; }
-.mdx-editor pre { background: #111; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; margin: 1.5em 0; }
-.mdx-editor code { background: #222; padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; color: #fbbf24; }
+/* --- [MDX Editor Typography] --- */
+.mdx-editor {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+}
+
+.mdx-editor h1, .mdx-editor h2, .mdx-editor h3 {
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.mdx-editor h1 { font-size: 1.75em; margin: 1.5em 0 0.8em; }
+.mdx-editor h2 { 
+  font-size: 1.4em; 
+  margin: 1.4em 0 0.6em; 
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--border);
+}
+
+.mdx-editor p { margin-bottom: 1.25em; line-height: 1.8; }
+
+.mdx-editor blockquote {
+  border-left: 3px solid var(--accent);
+  background: rgba(217, 119, 6, 0.05); /* Accent color with low opacity */
+  margin: 1.5em 0;
+  padding: 1rem 1.25rem;
+  border-radius: 0 8px 8px 0;
+  color: #d4d4d8;
+  font-style: italic;
+}
+
+.mdx-editor code {
+  background: #27272a;
+  color: #fbbf24; /* Amber-400 */
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+}
+
+.mdx-editor pre {
+  background: #121214;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  overflow-x: auto;
+  margin: 1.5em 0;
+}
