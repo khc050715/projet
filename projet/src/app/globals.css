@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;  /* 깊은 검정 */
+  --foreground: #e6e6e6;  /* 흐린 회색 */
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Arial', sans-serif;
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
