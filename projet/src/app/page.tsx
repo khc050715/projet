@@ -10,16 +10,18 @@ import {
 import { 
   collection, 
   addDoc, 
-  deleteDoc, // 삭제 함수
-  doc,       // 문서 특정 함수
-  query,     // 쿼리 생성
-  orderBy,   // 정렬
-  onSnapshot, // 실시간 감시
+  deleteDoc, 
+  updateDoc, // 수정 함수
+  doc, 
+  getDoc,    // 단일 문서 읽기 (버전 관리용)
+  query, 
+  orderBy, 
+  onSnapshot, 
   serverTimestamp,
   Timestamp 
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { Lock, Save, Loader2, Trash2, Clock } from "lucide-react";
+import { Lock, Save, Loader2, Trash2, Clock, RotateCcw, PenLine } from "lucide-react"; // 아이콘 추가
 import dynamic from "next/dynamic";
 
 // 에디터 동적 로딩
@@ -28,11 +30,11 @@ const NoteEditor = dynamic(() => import("@/components/NoteEditor"), {
   loading: () => <div className="text-gray-600">Editor Loading...</div>
 });
 
-// 기록 데이터 타입 정의
 interface RecordType {
   id: string;
   content: string;
   created_at: Timestamp | null;
+  updated_at?: Timestamp | null;
   uid: string;
 }
 
@@ -43,35 +45,33 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // 에디터 및 데이터 상태
   const [content, setContent] = useState("");
+  const [records, setRecords] = useState<RecordType[]>([]);
+  
+  // ★ 수정 모드 상태 (editingId가 있으면 수정 모드)
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  
-  // ★ 기록 목록 상태 추가
-  const [records, setRecords] = useState<RecordType[]>([]);
 
-  // 본인 이메일 (수정 필수)
-  const MY_EMAIL = "yours@email.com"; 
+  const MY_EMAIL = "yours@email.com"; // ★ 본인 이메일로 수정 필수
 
-  // 1. 인증 및 데이터 리스너 연결
+  // 1. 인증 및 초기화
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
     });
-    return () => unsubscribeAuth();
+    return () => unsubscribe();
   }, []);
 
-  // ★ 2. 기록 실시간 동기화 (로그인 된 상태에서만 동작)
+  // 2. 실시간 데이터 동기화
   useEffect(() => {
     if (!user) {
-      setRecords([]); // 로그아웃 시 기록 비움
+      setRecords([]);
       return;
     }
-
-    // records 컬렉션을 '작성일 역순'으로 구독
     const q = query(collection(db, "records"), orderBy("created_at", "desc"));
-    
     const unsubscribeDocs = onSnapshot(q, (snapshot) => {
       const fetchedRecords = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -79,7 +79,6 @@ export default function Home() {
       })) as RecordType[];
       setRecords(fetchedRecords);
     });
-
     return () => unsubscribeDocs();
   }, [user]);
 
@@ -96,41 +95,89 @@ export default function Home() {
     }
   };
 
-  // 4. 기록 저장
+  // ★ 4. 저장 및 수정 핸들러 (핵심 로직)
   const handleSave = async () => {
     if (!content.trim() || !user) return;
     setIsSaving(true);
+
     try {
-      await addDoc(collection(db, "records"), {
-        uid: user.uid,
-        content: content,
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-        status: 'active'
-      });
-      setSaveMessage("기록되었습니다.");
-      setContent(""); // 저장 후 에디터 비우기
+      if (editingId) {
+        // [수정 모드]: 과거를 보존하고 현재를 갱신
+        const docRef = doc(db, "records", editingId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const oldData = docSnap.data();
+          
+          // 1. revisions 서브컬렉션에 현재 상태 백업
+          await addDoc(collection(docRef, "revisions"), {
+            content_snapshot: oldData.content,
+            archived_at: serverTimestamp(),
+            original_created_at: oldData.created_at || null
+          });
+
+          // 2. 본문 업데이트
+          await updateDoc(docRef, {
+            content: content,
+            updated_at: serverTimestamp(),
+            // status: 'modified' // 필요 시 상태 변경 가능
+          });
+          setSaveMessage("수정 및 백업 완료.");
+        }
+      } else {
+        // [새 글 모드]: 신규 생성
+        await addDoc(collection(db, "records"), {
+          uid: user.uid,
+          content: content,
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+          status: 'active'
+        });
+        setSaveMessage("기록되었습니다.");
+      }
+
+      // 저장 후 초기화
+      setContent("");
+      setEditingId(null); // 수정 모드 해제
       setTimeout(() => setSaveMessage(""), 3000);
+
     } catch (error) {
       console.error("Error: ", error);
-      setSaveMessage("저장 실패.");
+      setSaveMessage("오류가 발생했습니다.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // ★ 5. 기록 삭제 기능
+  // ★ 5. 수정 모드 진입
+  const handleEdit = (record: RecordType) => {
+    setEditingId(record.id);
+    setContent(record.content); // 에디터에 내용 로드
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // 에디터 위치로 스크롤
+    setSaveMessage("과거의 실존을 수정합니다.");
+  };
+
+  // ★ 6. 수정 취소 (새 글 쓰기로 복귀)
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setContent("");
+    setSaveMessage("새로운 항해를 준비합니다.");
+    setTimeout(() => setSaveMessage(""), 2000);
+  };
+
+  // 7. 삭제
   const handleDelete = async (id: string) => {
-    if (!confirm("이 기록을 영원히 삭제하시겠습니까?")) return;
+    if (!confirm("이 기록을 영원히 삭제하시겠습니까? (복구 불가)")) return;
     try {
       await deleteDoc(doc(db, "records", id));
+      if (editingId === id) handleCancelEdit(); // 삭제한 글을 수정 중이었다면 취소
     } catch (error) {
       console.error("Delete error:", error);
     }
   };
 
-  // --- [날짜 포맷팅 함수] ---
-  const formatDate = (timestamp: Timestamp | null) => {
+  // 날짜 포맷팅
+  const formatDate = (timestamp: Timestamp | null | undefined) => {
     if (!timestamp) return "Just now";
     return new Date(timestamp.toDate()).toLocaleString('ko-KR', {
       month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -168,21 +215,40 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 입력 영역 */}
+      {/* 에디터 영역 */}
       <section className="mb-16 space-y-4">
-        <div className="min-h-[200px] p-4 border border-gray-800 rounded-lg bg-[#111]">
+        <div className={`min-h-[200px] p-4 border rounded-lg bg-[#111] transition-all ${editingId ? "border-yellow-600 ring-1 ring-yellow-900" : "border-gray-800"}`}>
           <NoteEditor markdown={content} onChange={setContent} />
         </div>
+        
         <div className="flex justify-between items-center">
-          <span className="text-sm text-green-500 font-mono pl-2">{saveMessage}</span>
-          <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-6 py-2 bg-white text-black text-sm font-bold rounded hover:bg-gray-200 disabled:opacity-50">
+          <div className="flex items-center gap-3">
+            <span className={`text-sm font-mono pl-2 ${editingId ? "text-yellow-500" : "text-green-500"}`}>
+              {saveMessage || (editingId ? "Editing Mode..." : "Ready to log.")}
+            </span>
+            {editingId && (
+               <button onClick={handleCancelEdit} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
+                 <RotateCcw className="w-3 h-3" /> Cancel
+               </button>
+            )}
+          </div>
+
+          <button 
+            onClick={handleSave} 
+            disabled={isSaving} 
+            className={`flex items-center gap-2 px-6 py-2 text-sm font-bold rounded disabled:opacity-50 transition-colors ${
+              editingId 
+                ? "bg-yellow-600 text-white hover:bg-yellow-700" 
+                : "bg-white text-black hover:bg-gray-200"
+            }`}
+          >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {isSaving ? "Saving..." : "Record Knot"}
+            {isSaving ? "Processing..." : (editingId ? "Update Revision" : "Record Knot")}
           </button>
         </div>
       </section>
 
-      {/* ★ 리스트 영역: 과거의 기록들 */}
+      {/* 리스트 영역 */}
       <section className="space-y-6">
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 border-l-2 border-gray-700 pl-3">
           History of Existence
@@ -195,25 +261,43 @@ export default function Home() {
             </div>
           ) : (
             records.map((rec) => (
-              <article key={rec.id} className="group relative p-5 rounded-lg border border-gray-800 bg-[#0a0a0a] hover:border-gray-600 transition-all">
-                {/* 상단 정보: 날짜 */}
+              <article 
+                key={rec.id} 
+                className={`group relative p-5 rounded-lg border bg-[#0a0a0a] transition-all ${
+                    editingId === rec.id ? "border-yellow-900/50 bg-yellow-900/10" : "border-gray-800 hover:border-gray-600"
+                }`}
+              >
+                {/* 상단 정보 */}
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
                     <Clock className="w-3 h-3" />
-                    {formatDate(rec.created_at)}
+                    <span>{formatDate(rec.created_at)}</span>
+                    {/* 수정된 기록 표시 */}
+                    {rec.updated_at && rec.updated_at.toMillis() !== rec.created_at?.toMillis() && (
+                        <span className="text-yellow-600/70 ml-1">(Revised)</span>
+                    )}
                   </div>
-                  <button 
-                    onClick={() => handleDelete(rec.id)}
-                    className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-500 transition-all"
-                    title="Delete Knot"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleEdit(rec)}
+                      className="text-gray-600 hover:text-yellow-500 transition-all"
+                      title="Revise Existence"
+                    >
+                      <PenLine className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(rec.id)}
+                      className="text-gray-600 hover:text-red-500 transition-all"
+                      title="Delete Knot"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* 본문 내용 (Preview) */}
+                {/* 본문 내용 (지금은 Raw Text, 다음 단계에서 뷰어로 교체 예정) */}
                 <div className="prose prose-invert prose-sm max-w-none text-gray-300 whitespace-pre-wrap font-sans">
-                  {/* 여기서는 MDX 원본을 텍스트로 보여줍니다. 추후 렌더링 기능을 붙일 수 있습니다. */}
                   {rec.content}
                 </div>
               </article>
