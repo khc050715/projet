@@ -217,7 +217,7 @@ export default function Home() {
 
       {/* 에디터 영역 */}
       <section className="mb-16 space-y-4">
-        <div className={`min-h-[200px] p-4 border rounded-lg bg-[#111] transition-all ${editingId ? "border-yellow-600 ring-1 ring-yellow-900" : "border-gray-800"}`}>
+        <div className={`min-h-50 p-4 border rounded-lg bg-[#111] transition-all ${editingId ? "border-yellow-600 ring-1 ring-yellow-900" : "border-gray-800"}`}>
           <NoteEditor markdown={content} onChange={setContent} />
         </div>
         
