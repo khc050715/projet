@@ -1,4 +1,4 @@
-// components/NoteEditor.tsx
+// src/components/NoteEditor.tsx
 "use client";
 
 import {
@@ -11,24 +11,25 @@ import {
   MDXEditorMethods
 } from "@mdxeditor/editor";
 import { ForwardedRef } from "react";
-import "@/app/mdx-editor.css"; // 방금 만든 CSS 임포트
+import "@/app/mdx-editor.css";
 
 interface EditorProps {
   markdown: string;
   editorRef?: ForwardedRef<MDXEditorMethods> | null;
   onChange?: (markdown: string) => void;
+  readOnly?: boolean; // 읽기 전용 모드 추가
 }
 
-// Next.js에서 동적 로딩을 위해 컴포넌트로 분리
-export default function NoteEditor({ markdown, editorRef, onChange }: EditorProps) {
+export default function NoteEditor({ markdown, editorRef, onChange, readOnly = false }: EditorProps) {
   return (
-    <div className="w-full prose prose-invert max-w-none">
+    <div className={`w-full prose prose-invert max-w-none ${readOnly ? 'pointer-events-none' : ''}`}>
       <MDXEditor
         ref={editorRef}
         markdown={markdown}
-        onChange={onChange}
-        className="mdx-editor outline-none"
-        placeholder="어떤 실존을 기록하시겠습니까..."
+        onChange={readOnly ? undefined : onChange}
+        readOnly={readOnly} // 플러그인 레벨 지원
+        className={`mdx-editor outline-none ${readOnly ? 'read-only' : ''}`}
+        placeholder={readOnly ? "" : "실존을 기록하십시오..."}
         plugins={[
           headingsPlugin(),
           listsPlugin(),
