@@ -1,4 +1,3 @@
-// src/components/NoteEditor.tsx
 "use client";
 
 import {
@@ -8,26 +7,26 @@ import {
   quotePlugin,
   thematicBreakPlugin,
   markdownShortcutPlugin,
-  MDXEditorMethods
+  MDXEditorMethods // 이 타입이 중요합니다
 } from "@mdxeditor/editor";
-import { ForwardedRef } from "react";
+import { forwardRef } from "react";
 import "@/app/mdx-editor.css";
 
 interface EditorProps {
   markdown: string;
-  editorRef?: ForwardedRef<MDXEditorMethods> | null;
   onChange?: (markdown: string) => void;
-  readOnly?: boolean; // 읽기 전용 모드 추가
+  readOnly?: boolean;
 }
 
-export default function NoteEditor({ markdown, editorRef, onChange, readOnly = false }: EditorProps) {
+// forwardRef를 사용하여 부모가 에디터의 메서드(setMarkdown 등)에 접근할 수 있게 합니다.
+const NoteEditor = forwardRef<MDXEditorMethods, EditorProps>(({ markdown, onChange, readOnly = false }, ref) => {
   return (
     <div className={`w-full prose prose-invert max-w-none ${readOnly ? 'pointer-events-none' : ''}`}>
       <MDXEditor
-        ref={editorRef}
+        ref={ref} // 부모로부터 받은 ref를 여기에 연결
         markdown={markdown}
         onChange={readOnly ? undefined : onChange}
-        readOnly={readOnly} // 플러그인 레벨 지원
+        readOnly={readOnly}
         className={`mdx-editor outline-none ${readOnly ? 'read-only' : ''}`}
         placeholder={readOnly ? "" : "실존을 기록하십시오..."}
         plugins={[
@@ -40,4 +39,8 @@ export default function NoteEditor({ markdown, editorRef, onChange, readOnly = f
       />
     </div>
   );
-}
+});
+
+NoteEditor.displayName = "NoteEditor";
+
+export default NoteEditor;

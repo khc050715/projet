@@ -1,179 +1,181 @@
-// src/app/edit/page.tsx
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { 
+  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, 
+  serverTimestamp, query, orderBy, getDocs 
+} from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { ArrowLeft, Save, Loader2, History, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Loader2, History, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { MDXEditorMethods } from "@mdxeditor/editor";
 
-// 에디터 로딩
 const NoteEditor = dynamic(() => import("@/components/NoteEditor"), { ssr: false });
 
 function EditForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const id = searchParams.get("id"); // URL에서 ?id=... 값을 가져옴
-
+  const id = useSearchParams().get("id");
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // 에디터 제어를 위한 Ref
+  const editorRef = useRef<MDXEditorMethods>(null);
+
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [originalData, setOriginalData] = useState<any>(null);
+  const [original, setOriginal] = useState<any>(null);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // 1. 초기 데이터 로드
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        router.push("/");
-        return;
-      }
+    const unsub = auth.onAuthStateChanged(async u => {
+      if (!u || !id) return router.push("/");
       setUser(u);
-
-      if (!id) {
-        alert("잘못된 접근입니다.");
-        router.push("/");
-        return;
-      }
-
-      // 문서 가져오기
-      try {
-        const docRef = doc(db, "records", id);
-        const snap = await getDoc(docRef);
+      
+      const docRef = doc(db, "records", id);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const d = snap.data();
+        setTitle(d.title);
+        setContent(d.content);
+        setOriginal(d);
         
-        if (snap.exists()) {
-          const data = snap.data();
-          setTitle(data.title || "");
-          setContent(data.content || "");
-          setOriginalData(data); // 수정 전 원본 데이터를 상태에 보존
-        } else {
-          alert("기록을 찾을 수 없습니다.");
-          router.push("/");
-        }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
+        // ★ 에디터 내용 강제 주입 (로딩 시 빈 화면 버그 해결)
+        editorRef.current?.setMarkdown(d.content);
+
+        const revSnap = await getDocs(query(collection(docRef, "revisions"), orderBy("archived_at", "desc")));
+        setRevisions(revSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       }
     });
-    return () => unsubAuth();
+    return () => unsub();
   }, [id, router]);
 
-  // 2. 수정 및 리비전 저장 (핵심 로직)
   const handleUpdate = async () => {
-    if (!title.trim() || !content.trim() || !id || !user) return;
-    
-    // 변경 사항이 없으면 알림
-    if (originalData.content === content && originalData.title === title) {
-      alert("변경 사항이 없습니다.");
-      return;
-    }
-
+    if (!title || !content) return;
     setIsSaving(true);
-    try {
-      const docRef = doc(db, "records", id);
+    // Revision 저장
+    if (original) await addDoc(collection(doc(db, "records", id!), "revisions"), { 
+      snapshot_title: original.title, 
+      snapshot_content: original.content, 
+      archived_at: serverTimestamp(), 
+      archived_by: user.uid 
+    });
+    // 메인 업데이트
+    await updateDoc(doc(db, "records", id!), { 
+      title, 
+      content, 
+      updated_at: serverTimestamp(), 
+      last_modified_by: user.uid 
+    });
+    router.push(`/view?id=${id}`);
+  };
 
-      // A. [Revision] 과거의 실존을 백업 (revisions 서브 컬렉션)
-      if (originalData) {
-        await addDoc(collection(docRef, "revisions"), {
-          // 과거 데이터 스냅샷
-          snapshot_title: originalData.title,
-          snapshot_content: originalData.content,
-          snapshot_created_at: originalData.created_at, // 원본 생성일
-          
-          // 리비전 메타데이터
-          archived_at: serverTimestamp(),
-          archived_by: user.uid,
-          revision_note: "User Edit"
-        });
-      }
-
-      // B. [Update] 현재의 실존을 갱신
-      await updateDoc(docRef, {
-        title: title,
-        content: content,
-        updated_at: serverTimestamp(),
-        last_modified_by: user.uid,
-        revision_count: (originalData.revision_count || 0) + 1 // 수정 횟수 증가
-      });
-
-      // 완료 후 홈으로
-      router.push("/");
-
+  const handleDelete = async () => {
+    if (!confirm("정말로 이 기록을 영구 삭제하시겠습니까? (복구 불가)")) return;
+    setIsDeleting(true);
+    try { 
+      await deleteDoc(doc(db, "records", id!)); 
+      router.push("/"); 
     } catch (e) {
-      console.error("Revision failed:", e);
-      alert("저장 중 오류가 발생했습니다.");
-      setIsSaving(false);
+      console.error(e);
+      setIsDeleting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-gray-500">
-        <Loader2 className="animate-spin" />
-      </div>
-    );
-  }
+  const handleRestore = (rev: any) => {
+    if (confirm("이 버전으로 내용을 되돌리시겠습니까?")) { 
+      setTitle(rev.snapshot_title); 
+      setContent(rev.snapshot_content); 
+      // ★ Restore 시 에디터 내용 즉시 반영
+      editorRef.current?.setMarkdown(rev.snapshot_content);
+      window.scrollTo(0, 0); 
+    }
+  };
+
+  if (!original) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-gray-600"/></div>;
 
   return (
-    <main className="min-h-screen bg-black text-gray-200 p-6 md:p-12 max-w-4xl mx-auto border-x border-gray-900">
-      {/* 네비게이션 */}
-      <nav className="flex justify-between items-center mb-10">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-gray-500 hover:text-white flex items-center gap-2 transition-colors">
-            <ArrowLeft className="w-4 h-4"/> Cancel
-          </Link>
-          <div className="flex items-center gap-2 px-3 py-1 rounded bg-yellow-900/20 border border-yellow-800/50 text-yellow-600 text-xs font-mono">
-            <History className="w-3 h-3"/>
-            <span>Revision Mode</span>
-          </div>
-        </div>
+    <main className="projet-container">
+      {/* 상단 네비게이션 */}
+      <nav className="flex justify-between items-center">
+        <Link href={`/view?id=${id}`} className="text-gray-500 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
+          <ArrowLeft className="w-4 h-4"/> Cancel
+        </Link>
+        
+        {/* ★ 버튼 그룹: 삭제와 업데이트 버튼을 나란히 배치 */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleDelete} 
+            disabled={isSaving || isDeleting} 
+            className="bg-red-900/10 text-red-500 border border-red-900/30 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-900/30 disabled:opacity-50 flex items-center gap-2 transition-all"
+          >
+            {isDeleting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>} 
+            Delete
+          </button>
 
-        <button 
-          onClick={handleUpdate} 
-          disabled={isSaving} 
-          className="bg-yellow-600 text-white px-6 py-2 rounded font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(202,138,4,0.3)]"
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-          {isSaving ? "Archiving..." : "Update Revision"}
-        </button>
+          <button 
+            onClick={handleUpdate} 
+            disabled={isSaving || isDeleting} 
+            className="bg-yellow-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-yellow-900/20"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} 
+            Update
+          </button>
+        </div>
       </nav>
 
-      {/* 수정 영역 */}
-      <div className="space-y-8 animate-in fade-in duration-500">
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-600 uppercase tracking-widest">Title of Existence</label>
-          <input
-            type="text"
-            className="w-full bg-transparent text-4xl font-bold text-white placeholder-gray-800 border-b border-gray-800 pb-4 focus:border-yellow-600 focus:outline-none transition-colors"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
+      {/* 에디터 영역 */}
+      <section className="flex flex-col gap-6 mt-4">
+        <input 
+          type="text" 
+          className="w-full bg-transparent text-3xl font-bold text-white placeholder-gray-700 border-none outline-none p-0" 
+          value={title} 
+          onChange={e => setTitle(e.target.value)}
+        />
+        <div className="min-h-100 border border-gray-800 rounded-xl p-1 bg-[#0a0a0a]">
+          <NoteEditor 
+            ref={editorRef} 
+            markdown={content} 
+            onChange={setContent} 
           />
         </div>
+      </section>
 
-        <div className="space-y-2">
-          <label className="flex justify-between text-xs font-bold text-gray-600 uppercase tracking-widest">
-            <span>Content Logic</span>
-            <span className="text-yellow-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Original will be archived</span>
-          </label>
-          <div className="min-h-[60vh] border border-gray-800 rounded-lg bg-[#0a0a0a] p-1 focus-within:ring-1 focus-within:ring-yellow-900 transition-all">
-            <NoteEditor markdown={content} onChange={setContent} />
+      {/* 히스토리 영역 */}
+      <section className="border-t border-gray-800 pt-8 flex flex-col gap-4">
+        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+          <History className="w-4 h-4"/> Revision History
+        </h2>
+        {revisions.length === 0 ? <p className="text-gray-700 text-sm italic">No revisions yet.</p> : 
+          <div className="flex flex-col gap-3">
+            {revisions.map(rev => (
+              <div key={rev.id} className="flex justify-between items-center p-4 rounded-lg bg-[#111] border border-gray-800 hover:border-gray-600 transition-all group">
+                <div className="flex flex-col gap-1 overflow-hidden">
+                  <span className="text-xs text-gray-500 font-mono">{rev.archived_at?.toDate().toLocaleString()}</span>
+                  <span className="text-sm text-gray-300 truncate font-medium">{rev.snapshot_title}</span>
+                </div>
+                <button 
+                  onClick={() => handleRestore(rev)} 
+                  className="opacity-0 group-hover:opacity-100 text-xs bg-gray-800 text-yellow-500 px-3 py-1.5 rounded-md hover:bg-yellow-900/30 transition-all flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3"/> Restore
+                </button>
+              </div>
+            ))}
           </div>
-        </div>
-      </div>
+        }
+      </section>
     </main>
   );
 }
 
-// Suspense 감싸기 (useSearchParams 사용 시 필수)
-export default function EditPage() {
+export default function EditPage() { 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center text-gray-500">Loading editor...</div>}>
+    <Suspense fallback={<div className="h-screen flex items-center justify-center bg-black"><Loader2 className="animate-spin text-gray-600"/></div>}>
       <EditForm />
     </Suspense>
-  );
+  ); 
 }
